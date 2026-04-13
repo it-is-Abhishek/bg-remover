@@ -4,7 +4,6 @@ import Steps from "../components/Steps";
 import BgSlider from "../components/BgSlider";
 import Testimonial from "../components/Testimonial";
 import Upload from "../components/Upload";
-import Footer from "../components/Footer";
 
 const Home = () => {
     return (
@@ -14,7 +13,6 @@ const Home = () => {
             <BgSlider/>
             <Testimonial/>
             <Upload/>
-            <Footer/>
         </div>
     );
 };

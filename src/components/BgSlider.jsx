@@ -8,6 +8,7 @@ const BgSlider = () => {
     const handleSliderChange = (e) => {
         setSliderPosition(e.target.value)
     }
+    //  This is the Arror Slider 
 
 
   return (
