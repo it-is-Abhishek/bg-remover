@@ -1,11 +1,19 @@
 import mongoose from "mongoose";
 
 const connectDB = async () => {
+    const rawUri = process.env.MONGODB_URI?.trim();
+
+    if (!rawUri) {
+        throw new Error("MONGODB_URI is missing");
+    }
+
+    const normalizedUri = rawUri.replace(/\/+$/, "");
+
     mongoose.connection.on('connected', () => {
         console.log("Database Connected");
         
     })
-    await mongoose.connect(`${process.env.MONGODB_URI}/bg-remover`)
+    await mongoose.connect(`${normalizedUri}/bg-remover`)
 };
 
 export default connectDB
