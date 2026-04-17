@@ -62,25 +62,4 @@ const clerkWebhooks = async (req, res) => {
     }
 }
 
-const createTestUser = async (req, res) => {
-    try {
-        const testUser = await userModel.findOneAndUpdate(
-            { clerkId: "test-clerk-id" },
-            {
-                clerkId: "test-clerk-id",
-                email: "test@example.com",
-                firstName: "Test",
-                lastName: "User",
-                photo: "https://example.com/test-user.png",
-            },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        )
-
-        res.json({ success: true, user: testUser })
-    } catch (error) {
-        console.log(error.message)
-        res.status(500).json({ success: false, message: error.message })
-    }
-}
-
-export {clerkWebhooks, createTestUser}
+export {clerkWebhooks}
