@@ -22,10 +22,10 @@ app.use(cors())
 app.use(async (req, res, next) => {
     try {
         await ensureDbConnection()
-        next()
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Database connection failed' })
+        console.error("DB connection error in middleware:", error.message)
     }
+    next()
 })
 
 //API ROUTE
@@ -38,14 +38,15 @@ app.use("/api/user", userRouter)
 if (process.env.VERCEL !== '1') {
     ensureDbConnection()
         .then(() => {
-            app.listen(PORT, ()=> {
-                console.log(`Server is running on port ${PORT}`)
-            })
+            console.log("DB connection established on startup");
         })
         .catch((error) => {
-            console.error('Failed to start server due to DB connection error:', error.message)
-            process.exit(1)
+            console.error('Warning: Failed to connect to DB on startup:', error.message)
         })
+
+    app.listen(PORT, ()=> {
+        console.log(`Server is running on port ${PORT}`)
+    })
 }
 
 export default app

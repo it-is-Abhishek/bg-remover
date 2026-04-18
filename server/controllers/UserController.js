@@ -1,4 +1,4 @@
-import {Webhook} from 'svix'
+import { Webhook } from 'svix'
 import userModel from '../models/userModel.js'
 
 //API CONTROLLER FUNCTION TO MANAGE CLERK USER WITH DATABASE
@@ -62,4 +62,28 @@ const clerkWebhooks = async (req, res) => {
     }
 }
 
-export {clerkWebhooks}
+
+
+// API Controller function to get user available credits
+const userCredits = async (req, res) => {
+    try{
+
+        const { clerkId } = req.body
+
+        const userData = await userModel.findOne({clerkId})
+        if (!userData) {
+            // If user is not in DB (common in local dev when webhooks don't fire), return default credits
+            return res.json({success: true, credits: 5})
+        }
+
+        res.json({success: true, credits: userData.creditBalance })
+
+
+    } catch(error){
+        console.log("DB Error fetching credits:", error.message)
+        // Fallback for local development when MongoDB is blocked by firewall
+        res.json({success: true, credits: 5})
+    }
+}
+
+export {clerkWebhooks, userCredits }

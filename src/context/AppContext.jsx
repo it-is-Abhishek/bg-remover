@@ -1,0 +1,70 @@
+import { createContext, useState } from "react";
+import { useAuth, useUser, useClerk} from "@clerk/react"
+import axios from "axios"
+import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
+
+
+export const AppContext = createContext();
+
+const AppContextProvider = ({ children }) => {
+
+  const [credit, setCredit] = useState("Loading...")
+  const [image, setImage] = useState(false)
+  const [resultImage, setResultImage] = useState(false)
+
+  const backendUrl = import.meta.env.VITE_BACKEND_URL
+  const navigate = useNavigate()
+
+  const { getToken } = useAuth()
+  const { isSignedIn } = useState()
+  const { openSignIn } = useClerk()
+
+  const loadCreditsData = async () => {
+    try {
+        const token = await getToken()
+        const {data} = await axios.get(backendUrl+"/api/user/credits", {headers: {token}})
+        if (data.success) {
+            setCredit(data.credits)
+            console.log("Credits loaded:", data.credits)
+        } else {
+            console.error("Backend returned error:", data.message)
+            toast.error(data.message || "Failed to load credits")
+            setCredit("Error")
+        }
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message)
+      return null;
+    }
+  };
+
+  const removeBg = async (image) => {
+    try{
+      if (!isSignedIn){
+        return openSignIn()
+      }
+      setImage(image)
+      setResultImage(false)
+      navigate('/result')
+
+
+    } catch(error){
+      console.log(error)
+      toast.error(error.message)
+    }
+  }
+
+  const value = {
+    credit,
+    setCredit,
+    loadCreditsData,
+    image,
+    setImage,
+    removeBg
+  };
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+};
+
+export default AppContextProvider;

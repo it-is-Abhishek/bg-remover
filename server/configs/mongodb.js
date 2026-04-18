@@ -13,7 +13,7 @@ const connectDB = async () => {
         console.log("Database Connected");
         
     })
-    await mongoose.connect(`${normalizedUri}/bg-remover`)
+    await mongoose.connect(normalizedUri, { dbName: 'bg-remover' })
 };
 
 export default connectDB

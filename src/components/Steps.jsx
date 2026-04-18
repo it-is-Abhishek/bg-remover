@@ -10,7 +10,7 @@ const Steps = () => {
         <div className='flex items-start flex-wrap gap-4 mt-16 xl:mt-24 justify-center'>
 
             <div className='flex items-start gap-4 bg-white border drop-shadow-md p-7 pb-10 rounded hover:scale-105 transition-all duration-500'>
-                <img className src={assets.upload_icon} alt=''/>
+                <img src={assets.upload_icon} alt=''/>
                 <div>
                   <p className='text-x1 font-medium'>Upload image</p>
                   <p className='text-sm text-neutral-500 mt-1'>This is a demo text, will replace it later. <br/> This is a demo..</p>
@@ -18,7 +18,7 @@ const Steps = () => {
             </div>
 
                         <div className='flex items-start gap-4 bg-white border drop-shadow-md p-7 pb-10 rounded hover:scale-105 transition-all duration-500'>
-                <img className src={assets.remove_bg_icon} alt=''/>
+                <img src={assets.remove_bg_icon} alt=''/>
                 <div>
                   <p className='text-x1 font-medium'>Remove Background</p>
                   <p className='text-sm text-neutral-500 mt-1'>This is a demo text, will replace it later. <br/> This is a demo..</p>
@@ -26,7 +26,7 @@ const Steps = () => {
             </div>
 
                         <div className='flex items-start gap-4 bg-white border drop-shadow-md p-7 pb-10 rounded hover:scale-105 transition-all duration-500'>
-                <img className src={assets.download_icon} alt=''/>
+                <img src={assets.download_icon} alt=''/>
                 <div>
                   <p className='text-x1 font-medium'>Download image</p>
                   <p className='text-sm text-neutral-500 mt-1'>This is a demo text, will replace it later. <br/> This is a demo..</p>
