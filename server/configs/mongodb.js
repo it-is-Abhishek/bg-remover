@@ -1,14 +1,47 @@
-import mongoose from "mongoose";
+import { MongoClient } from "mongodb";
 
-let connectionPromise = null;
+let clientPromise = null;
+let dbInstance = null;
 
-const connectDB = async () => {
-    if (mongoose.connection.readyState === 1) {
-        return mongoose.connection;
+const normalizeMongoError = (error) => {
+    const message = error?.message || "Unknown MongoDB connection error";
+
+    if (
+        message.includes("IP that isn't whitelisted") ||
+        message.includes("IP whitelist")
+    ) {
+        return new Error(
+            "MongoDB Atlas blocked this machine. Add your public IP to the Atlas IP Access List and try again."
+        );
     }
 
-    if (connectionPromise) {
-        return connectionPromise;
+    if (
+        message.includes("tlsv1 alert internal error") ||
+        message.includes("ssl3_read_bytes")
+    ) {
+        return new Error(
+            "MongoDB Atlas connection failed during TLS setup. Add your public IP to the Atlas IP Access List and restart the backend."
+        );
+    }
+
+    return error;
+};
+
+const createClient = (uri) =>
+    new MongoClient(uri, {
+        tls: true,
+        family: 4,
+        secureProtocol: 'TLSv1_2_method',
+        serverSelectionTimeoutMS: 5000,
+    });
+
+const connectDB = async () => {
+    if (dbInstance) {
+        return dbInstance;
+    }
+
+    if (clientPromise) {
+        return clientPromise;
     }
 
     const rawUri = process.env.MONGODB_URI?.trim();
@@ -18,28 +51,31 @@ const connectDB = async () => {
     }
 
     const normalizedUri = rawUri.replace(/\/+$/, "");
+    const client = createClient(normalizedUri);
 
-    mongoose.connection.on('connected', () => {
-        console.log("Database Connected");
-    });
-    mongoose.connection.on('error', (err) => {
-        console.error('MongoDB connection error:', err.message);
-    });
+    clientPromise = client.connect()
+        .then((connectedClient) => {
+            dbInstance = connectedClient.db('bg-remover');
+            console.log("Database Connected");
+            return dbInstance;
+        })
+        .catch((error) => {
+            throw normalizeMongoError(error);
+        })
+        .finally(() => {
+            clientPromise = null;
+        });
 
-    connectionPromise = mongoose.connect(normalizedUri, {
-        dbName: 'bg-remover',
-        retryWrites: true,
-        w: 'majority',
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
-        bufferCommands: false,
-        maxPoolSize: 10,
-        tls: true,
-    }).finally(() => {
-        connectionPromise = null;
-    });
-
-    return connectionPromise;
+    return clientPromise;
 };
 
-export default connectDB
+const getDb = async () => {
+    if (dbInstance) {
+        return dbInstance;
+    }
+
+    return connectDB();
+};
+
+export { getDb };
+export default connectDB;

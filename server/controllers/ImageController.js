@@ -1,13 +1,15 @@
 import axios from 'axios';
 import fs from 'fs';
 import FormData from 'form-data';
-import userModel from '../models/userModel.js';
+import { getDb } from '../configs/mongodb.js';
 
 
 //Controller function to remove bg form image
 const removeBgImage = async (req, res) => {
     let imagePath = null;
     try {
+        const db = await getDb()
+        const usersCollection = db.collection('users')
         const clerkId = req.auth?.clerkId
 
         if (!req.file?.path) {
@@ -18,15 +20,26 @@ const removeBgImage = async (req, res) => {
             return res.json({ success: false, message: 'Background removal API key is missing on the server' });
         }
 
-        let user;
-        try {
-            user = await userModel.findOne({clerkId}).maxTimeMS(3000).lean();
-        } catch (dbErr) {
-            console.log('DB user lookup failed, using fallback:', dbErr.message);
-            user = null; // trigger fallback
-        }
-        
-        if (user && user.creditBalance === 0){
+        const user = await usersCollection.findOneAndUpdate(
+            { clerkId },
+            {
+                $setOnInsert: {
+                    clerkId,
+                    creditBalance: 5,
+                    createdAt: new Date(),
+                },
+                $set: {
+                    updatedAt: new Date(),
+                },
+            },
+            {
+                upsert: true,
+                returnDocument: 'after',
+                maxTimeMS: 3000,
+            }
+        );
+
+        if (user.creditBalance <= 0){
             return res.json({ success: false, message: 'No Credit Balance', creditBalance: user.creditBalance });
         }
 
@@ -53,21 +66,31 @@ const removeBgImage = async (req, res) => {
         const base64Image = Buffer.from(data, 'binary').toString('base64')
         const resultImage = `data:image/png;base64, ${base64Image}` // fixed mimetype to png for transparent BG
 
-        let newCredits = user ? user.creditBalance - 1 : 5;
-        if (user) {
-            try {
-                await userModel.findByIdAndUpdate(user._id, {creditBalance: newCredits}).maxTimeMS(3000);
-            } catch (updateErr) {
-                console.log('DB update failed:', updateErr.message);
+        const updatedUser = await usersCollection.findOneAndUpdate(
+            { clerkId, creditBalance: { $gt: 0 } },
+            { $inc: { creditBalance: -1 } },
+            {
+                returnDocument: 'after',
+                maxTimeMS: 3000,
             }
+        );
+
+        if (!updatedUser) {
+            if (imagePath) {
+                fs.unlinkSync(imagePath);
+                imagePath = null;
+            }
+
+            return res.json({ success: false, message: 'Failed to update credit balance in database' });
         }
 
         fs.unlinkSync(imagePath);
+        imagePath = null;
         res.json({
             success: true,
             resultImage,
-            creditBalance: newCredits,
-            message: user ? 'Background Removed' : 'Background Removed (credit sync unavailable)'
+            creditBalance: updatedUser.creditBalance,
+            message: 'Background Removed'
         });
 
     } catch(error){

@@ -7,6 +7,22 @@ import { useNavigate } from "react-router-dom";
 
 export const AppContext = createContext();
 
+const formatBackendError = (message) => {
+  if (!message) {
+    return "Something went wrong. Please try again.";
+  }
+
+  if (
+    message.includes("MongoDB Atlas") ||
+    message.includes("tlsv1 alert internal error") ||
+    message.includes("ssl3_read_bytes")
+  ) {
+    return "Database connection failed. Add this machine to your MongoDB Atlas IP Access List, then restart the backend.";
+  }
+
+  return message;
+};
+
 const AppContextProvider = ({ children }) => {
 
   const [credit, setCredit] = useState("Loading...")
@@ -30,13 +46,14 @@ const AppContextProvider = ({ children }) => {
             setCredit(data.credits)
             console.log("Credits loaded:", data.credits)
         } else {
-            console.error("Backend returned error:", data.message)
-            toast.error(data.message || "Failed to load credits")
+            const message = formatBackendError(data.message)
+            console.error("Backend returned error:", message)
+            toast.error(message)
             setCredit("Error")
         }
     } catch (error) {
       console.error(error);
-      toast.error(error.message)
+      toast.error(formatBackendError(error.response?.data?.message || error.message))
       return null;
     }
   }, [getToken, backendUrl]);
@@ -78,11 +95,16 @@ const AppContextProvider = ({ children }) => {
 
       if (data.success) {
         setResultImage(data.resultImage)
-        data.creditBalance && setCredit(data.creditBalance)
+        if (typeof data.creditBalance === "number") {
+          setCredit(data.creditBalance)
+        }
       } else {
-        setRemoveBgError(data.message || "Background removal failed")
-        toast.error(data.message)
-        data.creditBalance && setCredit(data.creditBalance)
+        const message = formatBackendError(data.message || "Background removal failed")
+        setRemoveBgError(message)
+        toast.error(message)
+        if (typeof data.creditBalance === "number") {
+          setCredit(data.creditBalance)
+        }
         
         if (data.creditBalance === 0){
           navigate('/buy')
@@ -91,7 +113,7 @@ const AppContextProvider = ({ children }) => {
 
     } catch(error){
       console.log(error)
-      const message = error.response?.data?.message || error.message || "Background removal failed"
+      const message = formatBackendError(error.response?.data?.message || error.message || "Background removal failed")
       setRemoveBgError(message)
       toast.error(message)
     } finally {

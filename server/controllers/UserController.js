@@ -1,11 +1,14 @@
 import { Webhook } from 'svix'
-import userModel from '../models/userModel.js'
+import { getDb } from '../configs/mongodb.js'
 
 //API CONTROLLER FUNCTION TO MANAGE CLERK USER WITH DATABASE
 //http://localhost:4000/api/user/webhooks
 
 const clerkWebhooks = async (req, res) => {
     try{
+        const db = await getDb()
+        const usersCollection = db.collection('users')
+
         // CREATEB A SVIX INSTANCE WITH CLERK WEBHOOK INSTANCE
         const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET)
         await whook.verify(JSON.stringify(req.body),{
@@ -24,9 +27,14 @@ const clerkWebhooks = async (req, res) => {
                     email: data.email_addresses[0].email_address,
                     firstName: data.first_name,
                     lastName: data.last_name,
-                    photo: data.image_url
+                    photo: data.image_url,
+                    creditBalance: 5
                 }
-                await userModel.create(userData)
+                await usersCollection.updateOne(
+                    { clerkId: data.id },
+                    { $setOnInsert: userData },
+                    { upsert: true }
+                )
                 res.json({})
 
                 break;
@@ -40,14 +48,18 @@ const clerkWebhooks = async (req, res) => {
                     lastName: data.last_name,
                     photo: data.image_url
                 }
-                await userModel.findOneAndUpdate({clerkId:data.id}, userData)
+                await usersCollection.updateOne(
+                    { clerkId: data.id },
+                    { $set: userData },
+                    { upsert: true }
+                )
                 res.json({})
 
                 break;
             }
             case "user.deleted": {
 
-                await userModel.findOneAndDelete({clerkId: data.id})
+                await usersCollection.deleteOne({ clerkId: data.id })
                 res.json({})
 
                 break;
@@ -67,22 +79,35 @@ const clerkWebhooks = async (req, res) => {
 // API Controller function to get user available credits
 const userCredits = async (req, res) => {
     try{
+        const db = await getDb()
+        const usersCollection = db.collection('users')
 
         const clerkId = req.auth?.clerkId
 
-        const userData = await userModel.findOne({clerkId})
-        if (!userData) {
-            // If user is not in DB (common in local dev when webhooks don't fire), return default credits
-            return res.json({success: true, credits: 5})
-        }
+        const userData = await usersCollection.findOneAndUpdate(
+            { clerkId },
+            {
+                $setOnInsert: {
+                    clerkId,
+                    creditBalance: 5,
+                    createdAt: new Date(),
+                },
+                $set: {
+                    updatedAt: new Date(),
+                },
+            },
+            {
+                upsert: true,
+                returnDocument: 'after',
+            }
+        )
 
         res.json({success: true, credits: userData.creditBalance })
 
 
     } catch(error){
         console.log("DB Error fetching credits:", error.message)
-        // Fallback for local development when MongoDB is blocked by firewall
-        res.json({success: true, credits: 5})
+        res.json({success:false, message:error.message})
     }
 }
 
