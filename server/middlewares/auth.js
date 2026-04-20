@@ -14,8 +14,9 @@ const authUser = async (req, res, next) => {
             return res.json({ success: false, message: 'Invalid token format'})
         }
         
-        req.body = req.body || {}
-        req.body.clerkId = token_decode.clerkId || token_decode.sub
+        req.auth = {
+            clerkId: token_decode.clerkId || token_decode.sub
+        }
         next()
         
 

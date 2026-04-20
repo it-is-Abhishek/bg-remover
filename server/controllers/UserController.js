@@ -68,7 +68,7 @@ const clerkWebhooks = async (req, res) => {
 const userCredits = async (req, res) => {
     try{
 
-        const { clerkId } = req.body
+        const clerkId = req.auth?.clerkId
 
         const userData = await userModel.findOne({clerkId})
         if (!userData) {
