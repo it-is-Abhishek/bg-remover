@@ -2,15 +2,16 @@ import axios from 'axios';
 import fs from 'fs';
 import FormData from 'form-data';
 import { getDb } from '../configs/mongodb.js';
+import { defaultCredits, decrementCredits, getOrCreateUser } from '../configs/fallbackStore.js';
 
 
 //Controller function to remove bg form image
 const removeBgImage = async (req, res) => {
     let imagePath = null;
     try {
-        const db = await getDb()
-        const usersCollection = db.collection('users')
         const clerkId = req.auth?.clerkId
+        let user;
+        let updateCredits;
 
         if (!req.file?.path) {
             return res.json({ success: false, message: 'Please upload an image file' });
@@ -20,24 +21,39 @@ const removeBgImage = async (req, res) => {
             return res.json({ success: false, message: 'Background removal API key is missing on the server' });
         }
 
-        const user = await usersCollection.findOneAndUpdate(
-            { clerkId },
-            {
-                $setOnInsert: {
-                    clerkId,
-                    creditBalance: 5,
-                    createdAt: new Date(),
+        try {
+            const db = await getDb()
+            const usersCollection = db.collection('users')
+            user = await usersCollection.findOneAndUpdate(
+                { clerkId },
+                {
+                    $setOnInsert: {
+                        clerkId,
+                        creditBalance: defaultCredits,
+                        createdAt: new Date(),
+                    },
+                    $set: {
+                        updatedAt: new Date(),
+                    },
                 },
-                $set: {
-                    updatedAt: new Date(),
-                },
-            },
-            {
-                upsert: true,
-                returnDocument: 'after',
-                maxTimeMS: 3000,
-            }
-        );
+                {
+                    upsert: true,
+                    returnDocument: 'after',
+                    maxTimeMS: 3000,
+                }
+            );
+            updateCredits = async () => usersCollection.findOneAndUpdate(
+                { clerkId, creditBalance: { $gt: 0 } },
+                { $inc: { creditBalance: -1 } },
+                {
+                    returnDocument: 'after',
+                    maxTimeMS: 3000,
+                }
+            );
+        } catch {
+            user = getOrCreateUser(clerkId)
+            updateCredits = async () => decrementCredits(clerkId)
+        }
 
         if (user.creditBalance <= 0){
             return res.json({ success: false, message: 'No Credit Balance', creditBalance: user.creditBalance });
@@ -66,14 +82,7 @@ const removeBgImage = async (req, res) => {
         const base64Image = Buffer.from(data, 'binary').toString('base64')
         const resultImage = `data:image/png;base64, ${base64Image}` // fixed mimetype to png for transparent BG
 
-        const updatedUser = await usersCollection.findOneAndUpdate(
-            { clerkId, creditBalance: { $gt: 0 } },
-            { $inc: { creditBalance: -1 } },
-            {
-                returnDocument: 'after',
-                maxTimeMS: 3000,
-            }
-        );
+        const updatedUser = await updateCredits();
 
         if (!updatedUser) {
             if (imagePath) {

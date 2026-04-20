@@ -1,14 +1,14 @@
 import { Webhook } from 'svix'
 import { getDb } from '../configs/mongodb.js'
+import { defaultCredits, deleteUser, getOrCreateUser, insertTransaction } from '../configs/fallbackStore.js'
+import razorpay from 'razorpay';
+import transactionModel from '../models/transactionModel.js';
 
 //API CONTROLLER FUNCTION TO MANAGE CLERK USER WITH DATABASE
 //http://localhost:4000/api/user/webhooks
 
 const clerkWebhooks = async (req, res) => {
     try{
-        const db = await getDb()
-        const usersCollection = db.collection('users')
-
         // CREATEB A SVIX INSTANCE WITH CLERK WEBHOOK INSTANCE
         const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET)
         await whook.verify(JSON.stringify(req.body),{
@@ -28,13 +28,18 @@ const clerkWebhooks = async (req, res) => {
                     firstName: data.first_name,
                     lastName: data.last_name,
                     photo: data.image_url,
-                    creditBalance: 5
+                    creditBalance: defaultCredits
                 }
-                await usersCollection.updateOne(
-                    { clerkId: data.id },
-                    { $setOnInsert: userData },
-                    { upsert: true }
-                )
+                try {
+                    const db = await getDb()
+                    await db.collection('users').updateOne(
+                        { clerkId: data.id },
+                        { $setOnInsert: userData },
+                        { upsert: true }
+                    )
+                } catch {
+                    getOrCreateUser(data.id, userData)
+                }
                 res.json({})
 
                 break;
@@ -48,18 +53,28 @@ const clerkWebhooks = async (req, res) => {
                     lastName: data.last_name,
                     photo: data.image_url
                 }
-                await usersCollection.updateOne(
-                    { clerkId: data.id },
-                    { $set: userData },
-                    { upsert: true }
-                )
+                try {
+                    const db = await getDb()
+                    await db.collection('users').updateOne(
+                        { clerkId: data.id },
+                        { $set: userData },
+                        { upsert: true }
+                    )
+                } catch {
+                    getOrCreateUser(data.id, userData)
+                }
                 res.json({})
 
                 break;
             }
             case "user.deleted": {
 
-                await usersCollection.deleteOne({ clerkId: data.id })
+                try {
+                    const db = await getDb()
+                    await db.collection('users').deleteOne({ clerkId: data.id })
+                } catch {
+                    deleteUser(data.id)
+                }
                 res.json({})
 
                 break;
@@ -79,28 +94,31 @@ const clerkWebhooks = async (req, res) => {
 // API Controller function to get user available credits
 const userCredits = async (req, res) => {
     try{
-        const db = await getDb()
-        const usersCollection = db.collection('users')
-
         const clerkId = req.auth?.clerkId
+        let userData;
 
-        const userData = await usersCollection.findOneAndUpdate(
-            { clerkId },
-            {
-                $setOnInsert: {
-                    clerkId,
-                    creditBalance: 5,
-                    createdAt: new Date(),
+        try {
+            const db = await getDb()
+            userData = await db.collection('users').findOneAndUpdate(
+                { clerkId },
+                {
+                    $setOnInsert: {
+                        clerkId,
+                        creditBalance: defaultCredits,
+                        createdAt: new Date(),
+                    },
+                    $set: {
+                        updatedAt: new Date(),
+                    },
                 },
-                $set: {
-                    updatedAt: new Date(),
-                },
-            },
-            {
-                upsert: true,
-                returnDocument: 'after',
-            }
-        )
+                {
+                    upsert: true,
+                    returnDocument: 'after',
+                }
+            )
+        } catch {
+            userData = getOrCreateUser(clerkId)
+        }
 
         res.json({success: true, credits: userData.creditBalance })
 
@@ -111,4 +129,140 @@ const userCredits = async (req, res) => {
     }
 }
 
-export {clerkWebhooks, userCredits }
+const getRazorpayInstance = () => {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZOPPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+        throw new Error('Razorpay keys are missing in server/.env');
+    }
+
+    return new razorpay({
+        key_id: keyId,
+        key_secret: keySecret
+    });
+}
+
+
+// API to make payment for credits
+
+const paymentRazorpay = async(req, res) => {
+    try{
+        const razorpayInstance = getRazorpayInstance()
+
+        const clerkId = req.auth?.clerkId
+        const { planId } = req.body
+
+        let userData;
+        let insertTx;
+
+        try {
+            const db = await getDb()
+            userData = await db.collection('users').findOneAndUpdate(
+                { clerkId },
+                {
+                    $setOnInsert: {
+                        clerkId,
+                        creditBalance: defaultCredits,
+                        createdAt: new Date(),
+                    },
+                    $set: {
+                        updatedAt: new Date(),
+                    },
+                },
+                {
+                    upsert: true,
+                    returnDocument: 'after',
+                }
+            )
+            insertTx = (transactionData) => db.collection('transactions').insertOne(transactionData)
+        } catch {
+            userData = getOrCreateUser(clerkId)
+            insertTx = insertTransaction
+        }
+
+        if (!userData || !planId){
+            return res.json({ success: false, message: 'Invalid credentials' })
+        }
+
+        const normalizedPlanId = String(planId).trim().toLowerCase()
+        const planConfig = {
+            basic: { plan: 'Basic', credits: 100, amount: 10 },
+            advance: { plan: 'Advanced', credits: 500, amount: 50 },
+            advanced: { plan: 'Advanced', credits: 500, amount: 50 },
+            business: { plan: 'Business', credits: 5000, amount: 250 },
+        }[normalizedPlanId]
+
+        if (!planConfig) {
+            return res.json({ success: false, message: 'Invalid plan selected' });
+        }
+
+        const { plan, credits, amount } = planConfig
+        let date
+
+        date = Date.now()
+
+        // Creating transaction
+        const transactionData = {
+            clerkId,
+            plan,
+            amount,
+            credits,
+            date
+        }
+
+        const newTransaction = await insertTx(transactionData)
+
+        const options = {
+            amount: amount * 100,
+            currency: process.env.CURRENCY || 'INR',
+            receipt: newTransaction.insertedId.toString()
+        }
+
+        const order = await razorpayInstance.orders.create(options)
+        res.json({ success: true, order })
+
+    } catch(error){
+        console.log({ success: false, message: error.message })
+        res.json({ success: false, message: error.message })
+    }
+}
+
+//API Controller funciton to verify razorpay payment
+const verifyRazorPay = async () => {
+    try{
+
+        const { razorpay_order_id } = req.body
+
+        const orderInfo = await razorpayInstance.orders.fetch(razorpay_order_id)
+
+        if (orderInfo.status === "paid"){
+            const transactionData = await transactionModel.findById(orderInfo.receipt)
+
+            if (transactionData.payment){
+                return res.json({ sucess: false, message: "Payment Failed"})
+            }
+
+            // Adding credits in user data
+            const userdata = await userModel.findOne({ clerkId : transactionData.clerkId})
+            const creditBalance = userData.creditBalance + transactionData.credits
+
+            await userModel.findByIdAndUpdate(userData._id, {creditBalance})
+
+            // making the payment true
+            await transactionModel.findByIdAndUpdate(transactionData._id, {payment: true})
+
+            res.json({ success: true, message: " Credits Added"});
+
+        }
+
+
+    }catch(error){
+        console.log(error.message)
+        res.json({ sucess: false, message: error.message})
+    }
+}
+
+
+
+export {clerkWebhooks, userCredits, paymentRazorpay, verifyRazorPay}

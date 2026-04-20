@@ -122,6 +122,7 @@ const AppContextProvider = ({ children }) => {
   }
 
   const value = {
+    backendUrl,
     credit,
     setCredit,
     loadCreditsData,
