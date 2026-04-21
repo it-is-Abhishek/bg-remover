@@ -74,6 +74,11 @@ const AppContextProvider = ({ children }) => {
         return openSignIn()
       }
 
+      if (credit === 0) {
+        navigate('/buy')
+        return;
+      }
+
       setImage(image)
       setResultImage(false)
       setRemoveBgError("")
