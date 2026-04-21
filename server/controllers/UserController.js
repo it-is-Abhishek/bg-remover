@@ -1,8 +1,9 @@
 import { Webhook } from 'svix'
 import { getDb } from '../configs/mongodb.js'
-import { defaultCredits, deleteUser, getOrCreateUser, insertTransaction } from '../configs/fallbackStore.js'
 import razorpay from 'razorpay';
 import transactionModel from '../models/transactionModel.js';
+
+const defaultCredits = 5;
 
 //API CONTROLLER FUNCTION TO MANAGE CLERK USER WITH DATABASE
 //http://localhost:4000/api/user/webhooks
@@ -30,16 +31,12 @@ const clerkWebhooks = async (req, res) => {
                     photo: data.image_url,
                     creditBalance: defaultCredits
                 }
-                try {
-                    const db = await getDb()
-                    await db.collection('users').updateOne(
-                        { clerkId: data.id },
-                        { $setOnInsert: userData },
-                        { upsert: true }
-                    )
-                } catch {
-                    getOrCreateUser(data.id, userData)
-                }
+                const db = await getDb()
+                await db.collection('users').updateOne(
+                    { clerkId: data.id },
+                    { $setOnInsert: userData },
+                    { upsert: true }
+                )
                 res.json({})
 
                 break;
@@ -53,28 +50,20 @@ const clerkWebhooks = async (req, res) => {
                     lastName: data.last_name,
                     photo: data.image_url
                 }
-                try {
-                    const db = await getDb()
-                    await db.collection('users').updateOne(
-                        { clerkId: data.id },
-                        { $set: userData },
-                        { upsert: true }
-                    )
-                } catch {
-                    getOrCreateUser(data.id, userData)
-                }
+                const db = await getDb()
+                await db.collection('users').updateOne(
+                    { clerkId: data.id },
+                    { $set: userData },
+                    { upsert: true }
+                )
                 res.json({})
 
                 break;
             }
             case "user.deleted": {
 
-                try {
-                    const db = await getDb()
-                    await db.collection('users').deleteOne({ clerkId: data.id })
-                } catch {
-                    deleteUser(data.id)
-                }
+                const db = await getDb()
+                await db.collection('users').deleteOne({ clerkId: data.id })
                 res.json({})
 
                 break;
@@ -95,30 +84,24 @@ const clerkWebhooks = async (req, res) => {
 const userCredits = async (req, res) => {
     try{
         const clerkId = req.auth?.clerkId
-        let userData;
-
-        try {
-            const db = await getDb()
-            userData = await db.collection('users').findOneAndUpdate(
-                { clerkId },
-                {
-                    $setOnInsert: {
-                        clerkId,
-                        creditBalance: defaultCredits,
-                        createdAt: new Date(),
-                    },
-                    $set: {
-                        updatedAt: new Date(),
-                    },
+        const db = await getDb()
+        const userData = await db.collection('users').findOneAndUpdate(
+            { clerkId },
+            {
+                $setOnInsert: {
+                    clerkId,
+                    creditBalance: defaultCredits,
+                    createdAt: new Date(),
                 },
-                {
-                    upsert: true,
-                    returnDocument: 'after',
-                }
-            )
-        } catch {
-            userData = getOrCreateUser(clerkId)
-        }
+                $set: {
+                    updatedAt: new Date(),
+                },
+            },
+            {
+                upsert: true,
+                returnDocument: 'after',
+            }
+        )
 
         res.json({success: true, credits: userData.creditBalance })
 
@@ -153,33 +136,24 @@ const paymentRazorpay = async(req, res) => {
         const clerkId = req.auth?.clerkId
         const { planId } = req.body
 
-        let userData;
-        let insertTx;
-
-        try {
-            const db = await getDb()
-            userData = await db.collection('users').findOneAndUpdate(
-                { clerkId },
-                {
-                    $setOnInsert: {
-                        clerkId,
-                        creditBalance: defaultCredits,
-                        createdAt: new Date(),
-                    },
-                    $set: {
-                        updatedAt: new Date(),
-                    },
+        const db = await getDb()
+        const userData = await db.collection('users').findOneAndUpdate(
+            { clerkId },
+            {
+                $setOnInsert: {
+                    clerkId,
+                    creditBalance: defaultCredits,
+                    createdAt: new Date(),
                 },
-                {
-                    upsert: true,
-                    returnDocument: 'after',
-                }
-            )
-            insertTx = (transactionData) => db.collection('transactions').insertOne(transactionData)
-        } catch {
-            userData = getOrCreateUser(clerkId)
-            insertTx = insertTransaction
-        }
+                $set: {
+                    updatedAt: new Date(),
+                },
+            },
+            {
+                upsert: true,
+                returnDocument: 'after',
+            }
+        )
 
         if (!userData || !planId){
             return res.json({ success: false, message: 'Invalid credentials' })
@@ -211,7 +185,7 @@ const paymentRazorpay = async(req, res) => {
             date
         }
 
-        const newTransaction = await insertTx(transactionData)
+        const newTransaction = await db.collection('transactions').insertOne(transactionData)
 
         const options = {
             amount: amount * 100,
