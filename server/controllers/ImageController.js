@@ -42,18 +42,18 @@ const removeBgImage = async (req, res) => {
             return res.json({ success: false, message: 'User profile is incomplete. Please sign out and sign in again.' });
         }
 
+        const { creditBalance, ...profileFields } = userSeed;
+
         const user = await usersCollection.findOneAndUpdate(
             { clerkId },
             {
                 $setOnInsert: {
-                    ...userSeed,
+                    clerkId,
+                    creditBalance,
                     createdAt: new Date(),
                 },
                 $set: {
-                    email: userSeed.email,
-                    firstName: userSeed.firstName,
-                    lastName: userSeed.lastName,
-                    photo: userSeed.photo,
+                    ...profileFields,
                     updatedAt: new Date(),
                 },
             },

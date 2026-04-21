@@ -27,18 +27,18 @@ const upsertUserFromAuth = async (db, auth) => {
         throw new Error('User profile is incomplete. Please sign out and sign in again.');
     }
 
+    const { creditBalance, ...profileFields } = userSeed;
+
     return db.collection('users').findOneAndUpdate(
         { clerkId: auth.clerkId },
         {
             $setOnInsert: {
-                ...userSeed,
+                clerkId: auth.clerkId,
+                creditBalance,
                 createdAt: new Date(),
             },
             $set: {
-                email: userSeed.email,
-                firstName: userSeed.firstName,
-                lastName: userSeed.lastName,
-                photo: userSeed.photo,
+                ...profileFields,
                 updatedAt: new Date(),
             },
         },
