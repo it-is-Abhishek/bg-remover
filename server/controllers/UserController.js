@@ -1,7 +1,6 @@
 import { Webhook } from 'svix'
 import { getDb } from '../configs/mongodb.js'
 import razorpay from 'razorpay';
-import transactionModel from '../models/transactionModel.js';
 
 const defaultCredits = 5;
 
@@ -27,13 +26,13 @@ const upsertUserFromAuth = async (db, auth) => {
         throw new Error('User profile is incomplete. Please sign out and sign in again.');
     }
 
-    const { creditBalance, ...profileFields } = userSeed;
+    const { clerkId, creditBalance, ...profileFields } = userSeed;
 
     return db.collection('users').findOneAndUpdate(
         { clerkId: auth.clerkId },
         {
             $setOnInsert: {
-                clerkId: auth.clerkId,
+                clerkId,
                 creditBalance,
                 createdAt: new Date(),
             },
@@ -194,7 +193,8 @@ const paymentRazorpay = async(req, res) => {
             plan,
             amount,
             credits,
-            date
+            date,
+            payment: false,
         }
 
         const newTransaction = await db.collection('transactions').insertOne(transactionData)
@@ -215,37 +215,70 @@ const paymentRazorpay = async(req, res) => {
 }
 
 //API Controller funciton to verify razorpay payment
-const verifyRazorPay = async () => {
+const verifyRazorPay = async (req, res) => {
     try{
-
         const { razorpay_order_id } = req.body
+        if (!razorpay_order_id) {
+            return res.json({ success: false, message: "Missing razorpay_order_id" })
+        }
+
+        const razorpayInstance = getRazorpayInstance()
+        const db = await getDb()
+        const usersCollection = db.collection('users')
+        const transactionsCollection = db.collection('transactions')
 
         const orderInfo = await razorpayInstance.orders.fetch(razorpay_order_id)
 
-        if (orderInfo.status === "paid"){
-            const transactionData = await transactionModel.findById(orderInfo.receipt)
-
-            if (transactionData.payment){
-                return res.json({ sucess: false, message: "Payment Failed"})
-            }
-
-            // Adding credits in user data
-            const userdata = await userModel.findOne({ clerkId : transactionData.clerkId})
-            const creditBalance = userData.creditBalance + transactionData.credits
-
-            await userModel.findByIdAndUpdate(userData._id, {creditBalance})
-
-            // making the payment true
-            await transactionModel.findByIdAndUpdate(transactionData._id, {payment: true})
-
-            res.json({ success: true, message: " Credits Added"});
-
+        if (orderInfo.status !== "paid") {
+            return res.json({ success: false, message: "Payment not completed" })
         }
 
+        const transactionData = await transactionsCollection.findOne({
+            _id: orderInfo.receipt,
+        })
 
+        if (!transactionData) {
+            return res.json({ success: false, message: "Transaction not found" })
+        }
+
+        if (transactionData.payment){
+            return res.json({ success: true, message: "Credits already added"})
+        }
+
+        const updatedUser = await usersCollection.findOneAndUpdate(
+            { clerkId: transactionData.clerkId },
+            {
+                $inc: { creditBalance: transactionData.credits },
+                $set: { updatedAt: new Date() },
+            },
+            {
+                returnDocument: 'after',
+            }
+        )
+
+        if (!updatedUser) {
+            return res.json({ success: false, message: "User not found for transaction" })
+        }
+
+        await transactionsCollection.updateOne(
+            { _id: transactionData._id },
+            {
+                $set: {
+                    payment: true,
+                    paymentDate: Date.now(),
+                    razorpay_order_id,
+                },
+            }
+        )
+
+        res.json({
+            success: true,
+            message: "Credits Added",
+            creditBalance: updatedUser.creditBalance,
+        });
     }catch(error){
         console.log(error.message)
-        res.json({ sucess: false, message: error.message})
+        res.json({ success: false, message: error.message})
     }
 }
 
