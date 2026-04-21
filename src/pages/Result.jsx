@@ -1,22 +1,69 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { AppContext } from "../context/AppContext"
 
+const buildPreviewUrl = async (file) => {
+  if (!file) {
+    return null
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    const maxDimension = 1400
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      bitmap.close()
+      return URL.createObjectURL(file)
+    }
+
+    context.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close()
+
+    const previewBlob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.82)
+    })
+
+    return previewBlob ? URL.createObjectURL(previewBlob) : URL.createObjectURL(file)
+  } catch {
+    return URL.createObjectURL(file)
+  }
+}
+
 const Result = () => {
 
     const { resultImage, image, isRemovingBg, removeBgError, setImage, setResultImage } = useContext(AppContext)
     const [previewUrl, setPreviewUrl] = useState(null)
 
     useEffect(() => {
+      let isActive = true
+      let nextUrl = null
+
       if (!image) {
         setPreviewUrl(null)
         return
       }
 
-      const objectUrl = URL.createObjectURL(image)
-      setPreviewUrl(objectUrl)
+      ;(async () => {
+        nextUrl = await buildPreviewUrl(image)
+        if (isActive) {
+          setPreviewUrl(nextUrl)
+        } else if (nextUrl) {
+          URL.revokeObjectURL(nextUrl)
+        }
+      })()
 
       return () => {
-        URL.revokeObjectURL(objectUrl)
+        isActive = false
+        if (nextUrl) {
+          URL.revokeObjectURL(nextUrl)
+        }
       }
     }, [image])
 

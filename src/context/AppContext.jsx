@@ -1,4 +1,4 @@
-import { createContext, useState, useCallback, useEffect } from "react";
+import { createContext, useState, useCallback, useEffect, startTransition } from "react";
 import { useAuth, useUser, useClerk} from "@clerk/react"
 import axios from "axios"
 import { toast } from "react-toastify";
@@ -83,7 +83,9 @@ const AppContextProvider = ({ children }) => {
       setResultImage(false)
       setRemoveBgError("")
       setIsRemovingBg(true)
-      navigate('/result')
+      startTransition(() => {
+        navigate('/result')
+      })
 
       const token = await getToken()
 
@@ -112,7 +114,9 @@ const AppContextProvider = ({ children }) => {
         }
         
         if (data.creditBalance === 0){
-          navigate('/buy')
+          startTransition(() => {
+            navigate('/buy')
+          })
         }
       }
 
