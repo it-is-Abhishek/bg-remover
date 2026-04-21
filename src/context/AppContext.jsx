@@ -35,13 +35,20 @@ const AppContextProvider = ({ children }) => {
   const navigate = useNavigate()
 
   const { getToken } = useAuth()
-  const { isSignedIn } = useUser()
+  const { isSignedIn, user } = useUser()
   const { openSignIn } = useClerk()
+
+  const getUserHeaders = useCallback(() => ({
+    'x-user-email': user?.primaryEmailAddress?.emailAddress || '',
+    'x-user-first-name': user?.firstName || '',
+    'x-user-last-name': user?.lastName || '',
+    'x-user-photo': user?.imageUrl || '',
+  }), [user]);
 
   const loadCreditsData = useCallback(async () => {
     try {
         const token = await getToken()
-        const {data} = await axios.get(backendUrl+"/api/user/credits", {headers: {token}})
+        const {data} = await axios.get(backendUrl+"/api/user/credits", {headers: {token, ...getUserHeaders()}})
         if (data.success) {
             setCredit(data.credits)
             console.log("Credits loaded:", data.credits)
@@ -56,7 +63,7 @@ const AppContextProvider = ({ children }) => {
       toast.error(formatBackendError(error.response?.data?.message || error.message))
       return null;
     }
-  }, [getToken, backendUrl]);
+  }, [getToken, backendUrl, getUserHeaders]);
 
   useEffect(() => {
     if (isSignedIn) {
@@ -95,7 +102,8 @@ const AppContextProvider = ({ children }) => {
       const { data } = await axios.post(backendUrl + '/api/image/remove-bg', formData, { 
         headers: { 
           token,
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...getUserHeaders()
         },
         timeout: 60000
       })

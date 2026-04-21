@@ -5,6 +5,21 @@ import { getDb } from '../configs/mongodb.js';
 
 const defaultCredits = 5;
 
+const buildUserSeed = (auth) => {
+    if (!auth?.email || !auth?.photo) {
+        return null;
+    }
+
+    return {
+        clerkId: auth.clerkId,
+        email: auth.email,
+        firstName: auth.firstName || '',
+        lastName: auth.lastName || '',
+        photo: auth.photo,
+        creditBalance: defaultCredits,
+    };
+};
+
 
 //Controller function to remove bg form image
 const removeBgImage = async (req, res) => {
@@ -22,15 +37,23 @@ const removeBgImage = async (req, res) => {
             return res.json({ success: false, message: 'Background removal API key is missing on the server' });
         }
 
+        const userSeed = buildUserSeed(req.auth);
+        if (!userSeed) {
+            return res.json({ success: false, message: 'User profile is incomplete. Please sign out and sign in again.' });
+        }
+
         const user = await usersCollection.findOneAndUpdate(
             { clerkId },
             {
                 $setOnInsert: {
-                    clerkId,
-                    creditBalance: defaultCredits,
+                    ...userSeed,
                     createdAt: new Date(),
                 },
                 $set: {
+                    email: userSeed.email,
+                    firstName: userSeed.firstName,
+                    lastName: userSeed.lastName,
+                    photo: userSeed.photo,
                     updatedAt: new Date(),
                 },
             },

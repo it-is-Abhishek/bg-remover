@@ -2,7 +2,7 @@ import React, { useContext } from 'react'
 import { plans, assets} from '../assets/assets';
 import { AppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@clerk/react';
+import { useAuth, useUser } from '@clerk/react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
@@ -13,6 +13,14 @@ const BuyCredit = () => {
     const navigate = useNavigate()
 
     const { getToken } = useAuth()
+    const { user } = useUser()
+
+    const getUserHeaders = () => ({
+        'x-user-email': user?.primaryEmailAddress?.emailAddress || '',
+        'x-user-first-name': user?.firstName || '',
+        'x-user-last-name': user?.lastName || '',
+        'x-user-photo': user?.imageUrl || '',
+    })
 
     const loadRazorpayScript = () => {
         if (window.Razorpay) {
@@ -100,7 +108,7 @@ const BuyCredit = () => {
             }
 
             const token = await getToken()
-            const { data } = await axios.post(backendUrl + '/api/user/pay-razor', {planId}, {headers: {token}})
+            const { data } = await axios.post(backendUrl + '/api/user/pay-razor', {planId}, {headers: {token, ...getUserHeaders()}})
             console.log('pay-razor response', data)
             
             if (data.success) {

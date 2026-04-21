@@ -15,7 +15,11 @@ const authUser = async (req, res, next) => {
         }
         
         req.auth = {
-            clerkId: token_decode.clerkId || token_decode.sub
+            clerkId: token_decode.clerkId || token_decode.sub,
+            email: req.headers['x-user-email'],
+            firstName: req.headers['x-user-first-name'],
+            lastName: req.headers['x-user-last-name'],
+            photo: req.headers['x-user-photo'],
         }
         next()
         

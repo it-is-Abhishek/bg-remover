@@ -5,6 +5,50 @@ import transactionModel from '../models/transactionModel.js';
 
 const defaultCredits = 5;
 
+const buildUserSeed = (auth) => {
+    if (!auth?.email || !auth?.photo) {
+        return null;
+    }
+
+    return {
+        clerkId: auth.clerkId,
+        email: auth.email,
+        firstName: auth.firstName || '',
+        lastName: auth.lastName || '',
+        photo: auth.photo,
+        creditBalance: defaultCredits,
+    };
+};
+
+const upsertUserFromAuth = async (db, auth) => {
+    const userSeed = buildUserSeed(auth);
+
+    if (!userSeed) {
+        throw new Error('User profile is incomplete. Please sign out and sign in again.');
+    }
+
+    return db.collection('users').findOneAndUpdate(
+        { clerkId: auth.clerkId },
+        {
+            $setOnInsert: {
+                ...userSeed,
+                createdAt: new Date(),
+            },
+            $set: {
+                email: userSeed.email,
+                firstName: userSeed.firstName,
+                lastName: userSeed.lastName,
+                photo: userSeed.photo,
+                updatedAt: new Date(),
+            },
+        },
+        {
+            upsert: true,
+            returnDocument: 'after',
+        }
+    );
+};
+
 //API CONTROLLER FUNCTION TO MANAGE CLERK USER WITH DATABASE
 //http://localhost:4000/api/user/webhooks
 
@@ -84,25 +128,8 @@ const clerkWebhooks = async (req, res) => {
 // API Controller function to get user available credits
 const userCredits = async (req, res) => {
     try{
-        const clerkId = req.auth?.clerkId
         const db = await getDb()
-        const userData = await db.collection('users').findOneAndUpdate(
-            { clerkId },
-            {
-                $setOnInsert: {
-                    clerkId,
-                    creditBalance: defaultCredits,
-                    createdAt: new Date(),
-                },
-                $set: {
-                    updatedAt: new Date(),
-                },
-            },
-            {
-                upsert: true,
-                returnDocument: 'after',
-            }
-        )
+        const userData = await upsertUserFromAuth(db, req.auth)
 
         res.json({success: true, credits: userData.creditBalance })
 
@@ -138,23 +165,7 @@ const paymentRazorpay = async(req, res) => {
         const { planId } = req.body
 
         const db = await getDb()
-        const userData = await db.collection('users').findOneAndUpdate(
-            { clerkId },
-            {
-                $setOnInsert: {
-                    clerkId,
-                    creditBalance: defaultCredits,
-                    createdAt: new Date(),
-                },
-                $set: {
-                    updatedAt: new Date(),
-                },
-            },
-            {
-                upsert: true,
-                returnDocument: 'after',
-            }
-        )
+        const userData = await upsertUserFromAuth(db, req.auth)
 
         if (!userData || !planId){
             return res.json({ success: false, message: 'Invalid credentials' })
