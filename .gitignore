@@ -18,10 +18,19 @@ dist-ssr
 build
 *.local
 
-# Environment variables
+# Environment variables and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+server/.env
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
 
 # Editor directories and files
 .vscode/*
